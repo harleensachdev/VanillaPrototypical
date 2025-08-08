@@ -3,20 +3,20 @@ import torch
 import pandas as pd
 import torchaudio
 from tqdm import tqdm
-
 from config import (
-    AUDIO_DIR, SPECTROGRAM_DIR, METADATA_PATH, SAMPLE_RATE, 
-    N_FFT, HOP_LENGTH, N_MELS, N_WAY, N_SUPPORT, N_QUERY, 
-    TEST_SIZE, REQUIRED_CLASSES, EVALUATEDATAPATH, EVALUATEAUDIO_DIR
+    AUDIO_DIR, SPECTROGRAM_DIR, METADATA_PATH, SAMPLE_RATE,
+    N_FFT, HOP_LENGTH, N_MELS, N_WAY, N_SUPPORT, N_QUERY,
+    TEST_SIZE, REQUIRED_CLASSES, EVALUATEDATAPATH, EVALUATEAUDIO_DIR,
+    LABEL_MAP
 )
 from utils.audio_utils import (
-    load_audio, pad_or_trim, generate_spectrogram_path, 
+    load_audio, pad_or_trim, generate_spectrogram_path,
     trim_to_60_seconds, split_into_1sec_segments, parse_filename
 )
 
 def process_audio_file(file_path, mel_spectrogram):
     """Process a single audio file into 1 second segments and their spectrograms"""
-    # Load audio 
+    # Load audio
     waveform, sr = load_audio(file_path)
     if waveform is None:
         print(f"Skipping {file_path}, could not load audio")
@@ -24,27 +24,27 @@ def process_audio_file(file_path, mel_spectrogram):
     
     # Trim/pad to 60 seconds
     waveform_60sec = trim_to_60_seconds(waveform)
-
+    
     # Split into 1 second segments
     segments = split_into_1sec_segments(waveform_60sec)
-
+    
     # Process each segment
     spectrograms = []
     segment_paths = []
-
+    
     for i, segment in enumerate(segments):
         # Generate spectrogram
         spectrogram = mel_spectrogram(segment)
+        
         # Add small constant, take log
         spectrogram = torch.log(spectrogram + 1e-9)
-
-        # Generate path 
+        
+        # Generate path
         spectrogram_path = generate_spectrogram_path(file_path, segment_idx=i)
         os.makedirs(os.path.dirname(spectrogram_path), exist_ok=True)
-
+        
         # Save the spectrogram
         torch.save(spectrogram, spectrogram_path)
-
         spectrograms.append(spectrogram)
         segment_paths.append(spectrogram_path)
     
@@ -56,15 +56,14 @@ def getmetadata():
     2. Check for any spectrograms that have not been created
     3. Update metadata (adding rows)
     """
-    
     # Ensure metadata directory exists
     os.makedirs(os.path.dirname(METADATA_PATH), exist_ok=True)
-
+    
     # Create metadata file if empty/not exist
     if not os.path.exists(METADATA_PATH) or os.path.getsize(METADATA_PATH) == 0:
         print("Creating a new metadata file")
         metadata_df = pd.DataFrame(columns=[
-            'file_path', 'label', 'spectrogram_path', 'duration', 
+            'file_path', 'label', 'spectrogram_path', 'duration',
             'prediction_confidence', 'prediction', 'prediction_correct'
         ])
         metadata_df.to_csv(METADATA_PATH, index=False)
@@ -74,20 +73,20 @@ def getmetadata():
     
     # List out all audio files
     audio_files = []
-    for root, _, files in os.walk(AUDIO_DIR):
+    for root, dirs, files in os.walk(AUDIO_DIR):
         for file in files:
             if file.endswith(('.wav', '.mp3', '.flac', '.ogg')):
                 audio_files.append(os.path.join(root, file))
     
     existing_files = set(metadata_df['file_path'].tolist() if 'file_path' in metadata_df.columns else [])
-    
     new_files = [f for f in audio_files if f not in existing_files]
+    
     if len(new_files) == 0:
         print("No new audio files")
         return metadata_df
     else:
         print(f"Found {len(new_files)} new audio files to process")
-
+    
     # Process any new files
     new_data = []
     mel_spectrogram = torchaudio.transforms.MelSpectrogram(
@@ -97,18 +96,14 @@ def getmetadata():
         n_mels=N_MELS
     )
     
-    LABEL_MAPPING = {
-        'train/alarm': 'alarm',
-        'train/non_alarm': 'non_alarm',
-        'train/background': 'background',
-        'validation/alarm': 'alarm',
-        'validation/non_alarm': 'non_alarm', 
-        'validation/background': 'background',
-        'test/alarm': 'alarm',
-        'test/non_alarm': 'non_alarm',
-        'test/background': 'background'
-    }
-
+    # Create dynamic label mapping based on all classes in LABEL_MAP
+    LABEL_MAPPING = {}
+    for class_name in LABEL_MAP.keys():
+        # Add mappings for train/validation/test directories
+        LABEL_MAPPING[f'train/{class_name}'] = class_name
+        LABEL_MAPPING[f'validation/{class_name}'] = class_name
+        LABEL_MAPPING[f'test/{class_name}'] = class_name
+    
     # Process new files with progress bar
     for file_path in tqdm(new_files, desc="Processing training audio files"):
         try:
@@ -119,30 +114,36 @@ def getmetadata():
                     label = part2
                     break
             
+            # Skip files with unknown labels that aren't in our required classes
+            if label not in REQUIRED_CLASSES:
+                print(f"Skipping {file_path} - label '{label}' not in required classes")
+                continue
+            
             # Load audio
             waveform, sr = load_audio(file_path)
             if waveform is None:
                 print(f"Skipping {file_path}, could not load audio")
                 continue
-
+            
             # Pad or trim
             waveform = pad_or_trim(waveform)
-
+            
             # Get duration
             duration = waveform.shape[1] / sr
-
+            
             # Create the spectrogram
             spectrogram = mel_spectrogram(waveform)
+            
             # Add small constant, take log
             spectrogram = torch.log(spectrogram + 1e-9)
-
+            
             # Generate paths, ensure spectrogram dir exists
             spectrogram_path = generate_spectrogram_path(file_path)
             os.makedirs(os.path.dirname(spectrogram_path), exist_ok=True)
-
+            
             # Save spectrogram
             torch.save(spectrogram, spectrogram_path)
-
+            
             # Append to new data
             new_data.append({
                 'file_path': file_path,
@@ -156,11 +157,12 @@ def getmetadata():
             
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
-
+    
     # Add new data to metadata
-    new_df = pd.DataFrame(new_data)
-    metadata_df = pd.concat([metadata_df, new_df], ignore_index=True)
-
+    if new_data:
+        new_df = pd.DataFrame(new_data)
+        metadata_df = pd.concat([metadata_df, new_df], ignore_index=True)
+    
     # Save updated metadata
     metadata_df.to_csv(METADATA_PATH, index=False)
     return metadata_df
@@ -170,18 +172,17 @@ def getexperimentdata():
     1. Scan through evaluation audio directory
     2. Create/update experiment metadata CSV
     """
-    
     # Ensure metadata directory exists
     os.makedirs(os.path.dirname(EVALUATEDATAPATH), exist_ok=True)
-
+    
+    # Create dynamic column names based on all classes in config
+    class_count_columns = [f'{class_name}_count' for class_name in LABEL_MAP.keys()]
+    
     # Create experiment data file if empty/not exist
     if not os.path.exists(EVALUATEDATAPATH) or os.path.getsize(EVALUATEDATAPATH) == 0:
         print("Creating a new experiment file")
-        experiment_data_df = pd.DataFrame(columns=[
-            'file_path', 'site', 'date', 'time', 
-            'alarm_count', 'non_alarm_count', 'background_count',
-            'spectrogram_paths', 'processed'
-        ])
+        columns = ['file_path', 'site', 'date', 'time'] + class_count_columns + ['spectrogram_paths', 'processed']
+        experiment_data_df = pd.DataFrame(columns=columns)
         experiment_data_df.to_csv(EVALUATEDATAPATH, index=False)
     else:
         # Load existing metadata file
@@ -189,7 +190,7 @@ def getexperimentdata():
     
     # List out all audio files
     audio_files = []
-    for root, _, files in os.walk(EVALUATEAUDIO_DIR):
+    for root, dirs, files in os.walk(EVALUATEAUDIO_DIR):
         for file in files:
             if file.endswith(('.wav', '.mp3', '.flac', '.ogg')):
                 audio_files.append(os.path.join(root, file))
@@ -198,12 +199,13 @@ def getexperimentdata():
     
     # Find new files
     new_files = [f for f in audio_files if f not in existing_files]
+    
     if len(new_files) == 0:
         print("No new evaluation audio files")
         return experiment_data_df
     else:
         print(f"Found {len(new_files)} new evaluation audio files to process")
-
+    
     # Configure spectrogram transform
     mel_spectrogram = torchaudio.transforms.MelSpectrogram(
         sample_rate=SAMPLE_RATE,
@@ -220,56 +222,55 @@ def getexperimentdata():
             site, date, time = parse_filename(file_path)
             
             # Process file into 1-second segments
-            _, segment_paths = process_audio_file(file_path, mel_spectrogram)
+            spectrograms, segment_paths = process_audio_file(file_path, mel_spectrogram)
+            
+            # Create data entry with dynamic class counts
+            entry = {
+                'file_path': file_path,
+                'site': site,
+                'date': date,
+                'time': time,
+            }
+            
+            # Initialize all class counts to 0
+            for class_name in LABEL_MAP.keys():
+                entry[f'{class_name}_count'] = 0
             
             if segment_paths:
-                # Add entry to experiment data
-                new_data.append({
-                    'file_path': file_path,
-                    'site': site,
-                    'date': date,
-                    'time': time,
-                    'alarm_count': 0,
-                    'non_alarm_count': 0,
-                    'background_count': 0,
+                entry.update({
                     'spectrogram_paths': ','.join(segment_paths),
                     'processed': True  # Mark as processed since we've created the spectrograms
                 })
             else:
                 print(f"Warning: No segments generated for {file_path}")
-                new_data.append({
-                    'file_path': file_path,
-                    'site': site,
-                    'date': date,
-                    'time': time,
-                    'alarm_count': 0,
-                    'non_alarm_count': 0,
-                    'background_count': 0,
+                entry.update({
                     'spectrogram_paths': '',
                     'processed': False  # Mark as not processed since we couldn't generate segments
                 })
             
+            new_data.append(entry)
+            
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
-
+    
     # Add new data to experiment data
-    new_df = pd.DataFrame(new_data)
-    experiment_data_df = pd.concat([experiment_data_df, new_df], ignore_index=True)
-
+    if new_data:
+        new_df = pd.DataFrame(new_data)
+        experiment_data_df = pd.concat([experiment_data_df, new_df], ignore_index=True)
+    
     # Save updated experiment data
     experiment_data_df.to_csv(EVALUATEDATAPATH, index=False)
     return experiment_data_df
+
 def create_all_spectrograms(force_recreate=False):
     """
     Create spectrograms for all audio files in metadata and experiment data
-    
     Args:
         force_recreate: If True, recreate spectrograms even if they exist
     """
     # First, process training data
     if os.path.exists(METADATA_PATH):
         metadata_df = pd.read_csv(METADATA_PATH)
-        
         mel_spectrogram = torchaudio.transforms.MelSpectrogram(
             sample_rate=SAMPLE_RATE,
             n_fft=N_FFT,
@@ -309,11 +310,19 @@ def create_all_spectrograms(force_recreate=False):
                 print(f"Error processing {file_path}: {e}")
     else:
         print("Training metadata file not found. Run getmetadata first.")
-        
+    
     # Next, process evaluation data
     if os.path.exists(EVALUATEDATAPATH) and os.path.getsize(EVALUATEDATAPATH) > 0:
         try:
             experiment_df = pd.read_csv(EVALUATEDATAPATH)
+            
+            # Configure spectrogram transform
+            mel_spectrogram = torchaudio.transforms.MelSpectrogram(
+                sample_rate=SAMPLE_RATE,
+                n_fft=N_FFT,
+                hop_length=HOP_LENGTH,
+                n_mels=N_MELS
+            )
             
             # Find unprocessed files
             unprocessed_files = experiment_df[experiment_df['processed'] == False]
@@ -323,28 +332,29 @@ def create_all_spectrograms(force_recreate=False):
                     file_path = row['file_path']
                     
                     # Process file into segments and create spectrograms
-                    _, segment_paths = process_audio_file(file_path, mel_spectrogram)
+                    spectrograms, segment_paths = process_audio_file(file_path, mel_spectrogram)
                     
                     if segment_paths:
                         # Update spectrogram paths
                         experiment_df.at[idx, 'spectrogram_paths'] = ','.join(segment_paths)
                         experiment_df.at[idx, 'processed'] = True
-                    
+                        
                 except Exception as e:
                     print(f"Error processing {file_path}: {e}")
             
             # Save updated experiment data
             experiment_df.to_csv(EVALUATEDATAPATH, index=False)
+            
         except pd.errors.EmptyDataError:
             print(f"Warning: {EVALUATEDATAPATH} was empty. Creating new DataFrame.")
-            experiment_df = pd.DataFrame(columns=[
-                'file_path', 'site', 'date', 'time', 
-                'alarm_count', 'non_alarm_count', 'background_count',
-                'spectrogram_paths', 'processed'
-            ])
+            # Create dynamic column names based on all classes in config
+            class_count_columns = [f'{class_name}_count' for class_name in LABEL_MAP.keys()]
+            columns = ['file_path', 'site', 'date', 'time'] + class_count_columns + ['spectrogram_paths', 'processed']
+            experiment_df = pd.DataFrame(columns=columns)
             experiment_df.to_csv(EVALUATEDATAPATH, index=False)
     else:
         print("Evaluation metadata file not found or empty. Run getexperimentdata first.")
+
 def check_class_distribution(metadata_df):
     """Check the distribution of classes across all files in metadata"""
     if 'label' not in metadata_df.columns:
@@ -363,7 +373,7 @@ def check_class_distribution(metadata_df):
     distribution = {
         "total_samples": total_samples,
         "class_counts": class_counts,
-        "class_percentages": {cls: (count/total_samples*100) if total_samples > 0 else 0 
+        "class_percentages": {cls: (count/total_samples*100) if total_samples > 0 else 0
                              for cls, count in class_counts.items()}
     }
     
@@ -372,7 +382,6 @@ def check_class_distribution(metadata_df):
 def verify_few_shot_requirements(metadata_df, n_way=N_WAY, k_shot=N_SUPPORT, query_size=N_QUERY, test_size=TEST_SIZE):
     """
     Verify the latest dataset meets few shot requirements to prevent future errors
-    
     Checks:
     1. Total samples per class
     2. Sufficient samples for support set from train directory
@@ -394,11 +403,12 @@ def verify_few_shot_requirements(metadata_df, n_way=N_WAY, k_shot=N_SUPPORT, que
     for cls in REQUIRED_CLASSES:
         # Separate train and test samples
         train_samples = metadata_df[
-            (metadata_df['label'] == cls) & 
+            (metadata_df['label'] == cls) &
             (metadata_df['file_path'].str.contains('train/'))
         ]
+        
         test_samples = metadata_df[
-            (metadata_df['label'] == cls) & 
+            (metadata_df['label'] == cls) &
             (metadata_df['file_path'].str.contains('test/'))
         ]
         

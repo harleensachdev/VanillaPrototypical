@@ -1,19 +1,30 @@
 import torch
 import os
 from datetime import datetime
-
-
 DATA_DIR = "/Users/caramelloveschicken/Desktop/data"
 AUDIO_DIR = "/Users/caramelloveschicken/Desktop/data/training/audio_files"
 SPECTROGRAM_DIR = "/Users/caramelloveschicken/Desktop/data/training/spectrograms"
 METADATA_PATH = "/Users/caramelloveschicken/Desktop/data/training/results/FS1-metadata.csv"
-EVALUATEDATAPATH = "/Users/caramelloveschicken/Desktop/data/Botanical Garden/Small-BG2/Small-BG2-Results/small-bg2-fs1-results.csv"
-EVALUATEAUDIO_DIR  = "/Users/caramelloveschicken/Desktop/data/Botanical Garden/Small-BG2/Small-BG2-data"
+EVALUATEDATAPATH = '/Users/caramelloveschicken/Desktop/data/test set results/7way-outdomain-results/fs1-metadata.csv'
+EVALUATEAUDIO_DIR  ="/Users/caramelloveschicken/Desktop/data/training/audio_files"
+
+
+# Label mapping
+LABEL_MAP = {
+    "alarm": 0,
+    "non_alarm": 1,
+    "background":2,
+    "highfreq_noise" : 3,
+    "insect_call" : 4,
+    "weather_rain" :5,
+    "lowfreq_noise": 6
+}
+REQUIRED_CLASSES = ["alarm", "non_alarm", "background", "highfreq_noise", "insect_call","weather_rain","lowfreq_noise"]
 
 
 # Audio processing
 SAMPLE_RATE = 22050
-NUM_SAMPLES = 22050  # 1 second of audio
+NUM_SAMPLES = 22050  # 1 second of audiopy
 N_FFT = 1024
 HOP_LENGTH = 512
 N_MELS = 64
@@ -23,17 +34,11 @@ TEST_SIZE = 30
 BATCH_SIZE = 15
 EPISODES = 100 
 LEARNING_RATE = 0.001
-N_WAY = 3  # Number of classes per episode
-N_SUPPORT = 5 # Number of support samples per class
+N_WAY = 7  # Number of classes per episode
+N_SUPPORT = 20 # Number of support samples per class
 N_QUERY = 6 # Number of query samples per class
 
-# Label mapping
-LABEL_MAP = {
-    "alarm": 0,
-    "non_alarm": 1,
-    "background":2
-}
-REQUIRED_CLASSES = ["alarm", "non_alarm", "background"]
+
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
