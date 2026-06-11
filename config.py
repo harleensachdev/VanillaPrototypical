@@ -5,7 +5,7 @@ DATA_DIR = "/Users/caramelloveschicken/Desktop/data"
 AUDIO_DIR = "/Users/caramelloveschicken/Desktop/data/training/audio_files"
 SPECTROGRAM_DIR = "/Users/caramelloveschicken/Desktop/data/training/spectrograms"
 METADATA_PATH = "/Users/caramelloveschicken/Desktop/data/training/results/FS1-metadata.csv"
-EVALUATEDATAPATH = '/Users/caramelloveschicken/Desktop/data/test set results/7way-outdomain-results/fs1-metadata.csv'
+EVALUATEDATAPATH = '/Users/caramelloveschicken/Desktop/data/test set results/7way-indomain-results/fs1-metadata.csv'
 EVALUATEAUDIO_DIR  ="/Users/caramelloveschicken/Desktop/data/training/audio_files"
 
 

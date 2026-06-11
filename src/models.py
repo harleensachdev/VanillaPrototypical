@@ -94,42 +94,6 @@ class CNNEncoder(nn.Module):
         logits = self.fc2(x)
         return self.log_softmax(logits)
 
-class RelationNetwork(nn.Module):
-    def __init__(self, embedding_dim=EMBEDDING_DIM):
-        super().__init__()
-        
-        # The relation module takes concatenated embeddings from two samples
-        self.relation_module = nn.Sequential(
-            nn.Linear(embedding_dim * 2, 256),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
-            nn.Sigmoid()  # Output similarity score between 0 and 1
-        )
-    
-    def forward(self,x):
-        # seperate/ preconcatenated
-        if isinstance(x, tuple) or isinstance(x,list):
-            embedding1, embedding2 = x
-                
-            # Ensure both embeddings have the same shape
-            if embedding1.dim() == 1:
-                embedding1 = embedding1.unsqueeze(0)
-            if embedding2.dim() == 1:
-                embedding2 = embedding2.unsqueeze(0)
-            
-            # Concatenate the two embeddings
-            combined = torch.cat([embedding1, embedding2], dim=1)
-        else:
-            combined = x
-        
-        # Pass through relation module to get similarity score
-        return self.relation_module(combined)
 
 
 class PrototypicalNet(nn.Module):
@@ -193,10 +157,7 @@ class EnsembleModel(nn.Module):
         super().__init__()
         self.encoder = encoder
         self.proto_net = PrototypicalNet(encoder)
-        if relation_net is None:
-            self.relation_net = RelationNetwork(EMBEDDING_DIM)
-        else:
-            self.relation_net = relation_net
+
     
     def forward(self, x):
         """
@@ -249,21 +210,10 @@ class EnsembleModel(nn.Module):
         for i, label in enumerate(unique_labels):
             mask = support_labels == label
             prototypes[i] = support_embeddings[mask].mean(dim=0)
-        
-        # Calculate relation scores for each query-prototype pair
-        relation_scores = torch.zeros(query_embeddings.size(0), n_way, 
-                                     device=query_embeddings.device)
-        
-        for i, query_emb in enumerate(query_embeddings):
-            for j, prototype in enumerate(prototypes):
-                score = self.relation_net(query_emb.unsqueeze(0), prototype.unsqueeze(0))
-                relation_scores[i, j] = score
-        
-        # Normalize relation scores to sum to 1 (convert to probabilities)
-        relation_probs = relation_scores / relation_scores.sum(dim=1, keepdim=True)
+
         
         # Combine predictions using weighted average
-        ensemble_probs = proto_weight * proto_probs + relation_weight * relation_probs
+        ensemble_probs = proto_weight 
         
         # Return predicted labels
         _, predicted_labels = torch.max(ensemble_probs, dim=1)

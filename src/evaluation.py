@@ -200,19 +200,10 @@ def evaluate_labeled_test_set(model, test_dataset, support_dataset, device, n_wa
                 dists = torch.cdist(query_embedding.unsqueeze(0), prototypes)
                 proto_logits = -dists.squeeze(0)
                 proto_probs = F.softmax(proto_logits, dim=0)
-                
-                # Relation network prediction
-                rel_scores = torch.zeros(n_way, device=device)
-                for j in range(n_way):
-                    # Create pair of query embedding and prototype
-                    relation_pair = torch.cat([
-                        query_embedding.unsqueeze(0), 
-                        prototypes[j].unsqueeze(0)
-                    ], dim=1)
-                    rel_scores[j] = model.relation_net(relation_pair)
+            
                 
                 # Combine predictions
-                combined_probs = PROTO_WEIGHT * proto_probs + RELATION_WEIGHT * F.softmax(rel_scores, dim=0)
+                combined_probs =  proto_probs 
                 predicted_idx = torch.argmax(combined_probs).item()
                 confidence = combined_probs[predicted_idx].item()
                 
@@ -407,18 +398,9 @@ def evaluate_episodic(model, test_dataset, device, n_way=None, n_support=N_SUPPO
                 proto_logits = -dists.squeeze(0)
                 proto_probs = F.softmax(proto_logits, dim=0)
                 
-                # Relation network prediction
-                rel_scores = torch.zeros(len(prototypes), device=device)
-                for j in range(len(prototypes)):
-                    # Create pair of query embedding and prototype
-                    relation_pair = torch.cat([
-                        query_embedding.unsqueeze(0), 
-                        prototypes[j].unsqueeze(0)
-                    ], dim=1)
-                    rel_scores[j] = model.relation_net(relation_pair)
                 
                 # Combine predictions
-                combined_probs = PROTO_WEIGHT * proto_probs + RELATION_WEIGHT * F.softmax(rel_scores, dim=0)
+                combined_probs = PROTO_WEIGHT * proto_probs 
                 pred_class = torch.argmax(combined_probs).item()
                 confidence = combined_probs[pred_class].item()
                 
@@ -521,18 +503,9 @@ def evaluate_ensemble_classification(model, segment_dataset, support_dataset, de
                 proto_logits = -dists.squeeze(0)
                 proto_probs = F.softmax(proto_logits, dim=0)
                 
-                # Relation network prediction
-                rel_scores = torch.zeros(n_way, device=device)
-                for j in range(n_way):
-                    # Create pair of query embedding and prototype
-                    relation_pair = torch.cat([
-                        query_embedding.unsqueeze(0), 
-                        prototypes[j].unsqueeze(0)
-                    ], dim=1)
-                    rel_scores[j] = model.relation_net(relation_pair)
                 
                 # Combine predictions
-                combined_probs = PROTO_WEIGHT * proto_probs + RELATION_WEIGHT * F.softmax(rel_scores, dim=0)
+                combined_probs =  proto_probs 
                 predicted_idx = torch.argmax(combined_probs).item()
                 confidence = combined_probs[predicted_idx].item()
                 

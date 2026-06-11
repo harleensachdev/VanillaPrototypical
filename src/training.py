@@ -39,7 +39,6 @@ def train_few_shot(model, dataset, episodes=EPISODES, n_way=N_WAY, n_support=N_S
     
     # loss functions
     proto_criterion = nn.NLLLoss()
-    relation_criterion = nn.MSELoss()
     
     # Setup optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -94,32 +93,7 @@ def train_few_shot(model, dataset, episodes=EPISODES, n_way=N_WAY, n_support=N_S
 
         proto_loss = proto_criterion(log_p_y, target_inds)
 
-        # relation net loss
-        relation_scores = []
-        relation_targets = []
-
-        for i, query_emb in enumerate(query_embeddings):
-            query_label = query_labels[i]
-
-            for j in range(n_way):
-                proto_label = j
-                target = 1.0 if query_label == proto_label else 0.0
-
-                # get relation score
-                relation_pair = torch.cat([query_emb, prototypes[j]]).unsqueeze(0)
-                score = model.relation_net(relation_pair)
-
-                relation_scores.append(score)
-                relation_targets.append(target)
-        
-        # output
-        relation_scores = torch.cat(relation_scores)
-        relation_targets = torch.tensor(relation_targets, dtype=torch.float).to(device).view(-1, 1)
-
-        relation_loss = relation_criterion(relation_scores, relation_targets)
-
-        # combined loss
-        total_loss = proto_weight * proto_loss + relation_weight * relation_loss
+        total_loss =proto_loss 
 
         # Backpropagate
         optimizer.zero_grad()

@@ -44,7 +44,7 @@ from src.preprocess import (
     process_audio_file
 )
 from src.dataset import BirdSoundDataset, SegmentDataset, EpisodicDataLoader
-from src.models import CNNEncoder, RelationNetwork, EnsembleModel
+from src.models import CNNEncoder, EnsembleModel
 from src.training import train_few_shot
 from src.evaluation import (
     evaluate_episodic, 
@@ -619,8 +619,7 @@ def main():
             
             # Step 5: Initialize models
             encoder = CNNEncoder().to(DEVICE)
-            relation_net = RelationNetwork().to(DEVICE)
-            ensemble_model = EnsembleModel(encoder, relation_net).to(DEVICE)
+            ensemble_model = EnsembleModel(encoder).to(DEVICE)
             
             # Step 6: Train the model
             print(f"\nStarting training for {NUM_CLASSES} classes...")
